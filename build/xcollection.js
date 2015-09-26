@@ -72,7 +72,7 @@ var xross;
             return this._count;
         };
         NSet.prototype.isEmpty = function () {
-            return this._count > 0;
+            return this._count <= 0;
         };
         return NSet;
     })();
@@ -123,7 +123,7 @@ var xross;
             return this._count;
         };
         NMap.prototype.isEmpty = function () {
-            return this._count > 0;
+            return this._count <= 0;
         };
         return NMap;
     })();
@@ -182,7 +182,7 @@ var xross;
             return this._size;
         };
         NTreeBase.prototype.isEmpty = function () {
-            return this._size > 0;
+            return this._size <= 0;
         };
         NTreeBase.prototype.pollFirstEntry = function () {
             if (this._root !== null) {

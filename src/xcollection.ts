@@ -125,7 +125,7 @@ export module xross {
         }
 
         public isEmpty(): boolean {
-            return this._count > 0;
+            return this._count <= 0;
         }
 
         protected _p: NHashCodeProvider<T>;
@@ -194,7 +194,7 @@ export module xross {
         }
 
         public isEmpty(): boolean {
-            return this._count > 0;
+            return this._count <= 0;
         }
 
         protected _p: NHashCodeProvider<K>;
@@ -277,7 +277,7 @@ export module xross {
         }
 
         public isEmpty(): boolean {
-            return this._size > 0;
+            return this._size <= 0;
         }
 
         public pollFirstEntry(): V {
