@@ -7,7 +7,7 @@ The implementation has not been tested yet.
 
 ## Building from the Source
 
-Install TypeScript compiler first:
+Install TypeScript compiler:
 
 ```
 npm install -g typescript

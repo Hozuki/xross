@@ -3,3 +3,4 @@
  */
 
 var xross = require("../build/xross.js").xross;
+var test = require("../build/xross-test.js").xross.TestBentleyOttmann;
