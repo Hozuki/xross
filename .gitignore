@@ -1,0 +1,15 @@
+
+# Editors and IDEs
+
+.idea
+.vscode
+
+# NPM or NodeJS-like
+
+node_modules
+nwjs
+
+# Files ruined during my test (my bad)
+
+gulpfile.js
+package.json
