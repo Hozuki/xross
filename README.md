@@ -1,6 +1,6 @@
 # xross
 
-A TypeScript implementation of the implementation of [Bentley-Ottmann algorithm](https://en.wikipedia.org/wiki/Bentley%E2%80%93Ottmann_algorithm#Faster_algorithms),
+A TypeScript implementation of [Bentley-Ottmann algorithm](https://en.wikipedia.org/wiki/Bentley%E2%80%93Ottmann_algorithm#Faster_algorithms),
 ported from [CompGeom](//github.com/bkiers/CompGeom/blob/master/src/main/compgeom/algorithms/BentleyOttmann.java).
 
 The project uses ECMAScript 2015 (ECMAScript 6/Harmony) syntax. Please make sure
