@@ -797,7 +797,6 @@ export module xross {
 
         public constructor() {
             super(new XHashCodeProvider<T>());
-            throw new NotImplementedError();
         }
 
     }
@@ -806,7 +805,6 @@ export module xross {
 
         public constructor() {
             super(new XHashCodeProvider<K>());
-            throw new NotImplementedError();
         }
 
     }
@@ -815,7 +813,6 @@ export module xross {
 
         public constructor() {
             super(new PHashCodeProvider<T>());
-            throw new NotImplementedError();
         }
 
     }
@@ -824,7 +821,6 @@ export module xross {
 
         public constructor() {
             super(new PHashCodeProvider<K>());
-            throw new NotImplementedError();
         }
 
     }
@@ -833,7 +829,6 @@ export module xross {
 
         public constructor(comparer: IComparer<T> = null) {
             super(comparer);
-            throw new NotImplementedError();
         }
 
     }
@@ -842,7 +837,6 @@ export module xross {
 
         public constructor(comparer: IComparer<K> = null) {
             super(comparer);
-            throw new NotImplementedError();
         }
 
     }
@@ -851,7 +845,6 @@ export module xross {
 
         public constructor(comparer: IComparer<T> = null) {
             super(comparer);
-            throw new NotImplementedError();
         }
 
     }
@@ -860,7 +853,6 @@ export module xross {
 
         public constructor(comparer: IComparer<K> = null) {
             super(comparer);
-            throw new NotImplementedError();
         }
 
     }

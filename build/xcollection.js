@@ -9,7 +9,6 @@ var xross;
 (function (xross) {
     "use strict";
     var ArgumentError = xcommon.xross.ArgumentError;
-    var NotImplementedError = xcommon.xross.NotImplementedError;
     var XHashCodeProvider = (function () {
         function XHashCodeProvider() {
         }
@@ -715,7 +714,6 @@ var xross;
         __extends(XSet, _super);
         function XSet() {
             _super.call(this, new XHashCodeProvider());
-            throw new NotImplementedError();
         }
         return XSet;
     })(NSet);
@@ -724,7 +722,6 @@ var xross;
         __extends(XMap, _super);
         function XMap() {
             _super.call(this, new XHashCodeProvider());
-            throw new NotImplementedError();
         }
         return XMap;
     })(NMap);
@@ -733,7 +730,6 @@ var xross;
         __extends(PSet, _super);
         function PSet() {
             _super.call(this, new PHashCodeProvider());
-            throw new NotImplementedError();
         }
         return PSet;
     })(NSet);
@@ -742,7 +738,6 @@ var xross;
         __extends(PMap, _super);
         function PMap() {
             _super.call(this, new PHashCodeProvider());
-            throw new NotImplementedError();
         }
         return PMap;
     })(NMap);
@@ -752,7 +747,6 @@ var xross;
         function XTreeSet(comparer) {
             if (comparer === void 0) { comparer = null; }
             _super.call(this, comparer);
-            throw new NotImplementedError();
         }
         return XTreeSet;
     })(NTreeSet);
@@ -762,7 +756,6 @@ var xross;
         function XTreeMap(comparer) {
             if (comparer === void 0) { comparer = null; }
             _super.call(this, comparer);
-            throw new NotImplementedError();
         }
         return XTreeMap;
     })(NTreeMap);
@@ -772,7 +765,6 @@ var xross;
         function PTreeSet(comparer) {
             if (comparer === void 0) { comparer = null; }
             _super.call(this, comparer);
-            throw new NotImplementedError();
         }
         return PTreeSet;
     })(NTreeSet);
@@ -782,7 +774,6 @@ var xross;
         function PTreeMap(comparer) {
             if (comparer === void 0) { comparer = null; }
             _super.call(this, comparer);
-            throw new NotImplementedError();
         }
         return PTreeMap;
     })(NTreeMap);

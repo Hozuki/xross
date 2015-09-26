@@ -19,12 +19,6 @@ Compile TypeScript sources:
 tsc -p .
 ```
 
-Run the commands in shell:
-
-```
-npm install
-```
-
 ## Testing
 
 Use [Electron](http://electron.atom.io/) or [nw.js](http://nwjs.io/) to load
