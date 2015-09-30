@@ -19,7 +19,7 @@ tsc -p .
 
 ## Testing
 
-## How-To
+### How-To
 
 Run `test/boot.js`:
 
@@ -28,7 +28,7 @@ cd /path/to/project/
 node test/boot.js
 ```
 
-## Current Result
+### Current Result
 
 1. Common lines (PASSED)
 2. Vertical and horizontal lines only (PASSED)
