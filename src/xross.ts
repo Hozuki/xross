@@ -1,8 +1,4 @@
-//import {IEquatable, IComparer, IComparable, ArgumentError, NotImplementedError} from "./xcommon";
-//import {TreeSet, TreeMap, arrayFromSet, keySet} from "./xcollection";
 
-//import * as xcommon from "./xcommon";
-//import * as xcollection from "./xcollection";
 import xcommon = require("./xcommon");
 import xcollection = require("./xcollection");
 import xgeom = require("./xgeom");
@@ -13,8 +9,8 @@ export module xross {
 
     import ISet = xcollection.xross.ISet;
     import IMap = xcollection.xross.IMap;
-    import XSet = xcollection.xross.XSet;
-    import XMap = xcollection.xross.XMap;
+    import ObjectSet = xcollection.xross.ObjectSet;
+    import ObjectMap = xcollection.xross.ObjectMap;
     import arrayFromSet = xcollection.xross.arrayFromSet;
     import keySet = xcollection.xross.keySet;
     import Point2D = xgeom.xross.Point2D;
@@ -33,7 +29,7 @@ export module xross {
 
         public static intersectionsMap(segments: ISet<LineSegment2D>): IMap<Point2D, ISet<LineSegment2D>> {
             if (segments.size() < 2) {
-                return new XMap<Point2D, ISet<LineSegment2D>>();
+                return new ObjectMap<Point2D, ISet<LineSegment2D>>();
             }
             var sweepLine: SweepLine = new SweepLine();
             var queue: EventQueue = new EventQueue(segments, sweepLine);
@@ -46,7 +42,7 @@ export module xross {
 
         public static intersectionsNaive(segments: ISet<LineSegment2D>): ISet<Point2D> {
             var array: Array<LineSegment2D> = arrayFromSet(segments);
-            var intersections: ISet<Point2D> = new XSet<Point2D>();
+            var intersections: ISet<Point2D> = new ObjectSet<Point2D>();
             var p: Point2D;
             for (var i: number = 0; i < array.length - 1; i++) {
                 for (var j: number = i + 1; j < array.length; j++) {

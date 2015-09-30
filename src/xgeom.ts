@@ -14,20 +14,32 @@ export module xross {
     import IHashCodeProvider = xcollection.xross.IHashCodeProvider;
     import ISet = xcollection.xross.ISet;
     import IMap = xcollection.xross.IMap;
-    import XSet = xcollection.xross.XSet;
-    import XMap = xcollection.xross.XMap;
-    import XTreeMap = xcollection.xross.XTreeMap;
-    import XTreeSet = xcollection.xross.XTreeSet;
-    import PTreeSet = xcollection.xross.PTreeSet;
+    import ObjectSet = xcollection.xross.ObjectSet;
+    import ObjectMap = xcollection.xross.ObjectMap;
+    import ObjectTreeMap = xcollection.xross.ObjectTreeMap;
+    import ObjectTreeSet = xcollection.xross.ObjectTreeSet;
+    import PrimitiveTreeSet = xcollection.xross.PrimitiveTreeSet;
+    import LinkedObjectSet = xcollection.xross.LinkedObjectSet;
     import arrayFromSet = xcollection.xross.arrayFromSet;
     import arrayToSet = xcollection.xross.arrayToSet;
     import keySet = xcollection.xross.keySet;
 
+    function bkdrHash(s: string): number {
+        var r: number = 0;
+        for (var i: number = 0; i < s.length; i++) {
+            r = (r * 131 + s.charCodeAt(i)) & 0xffffffff;
+        }
+        return r;
+    }
+
     export class Point2D implements IEquatable<Point2D>, IHashCodeProvider {
+
+        public static ORIGIN: Point2D = new Point2D(0, 0);
 
         public constructor(x: number = 0, y: number = 0) {
             this.x = x;
             this.y = y;
+            this._hashCode = bkdrHash(this.x.toString() + " " + this.y.toString());
         }
 
         public x: number;
@@ -50,7 +62,7 @@ export module xross {
             } else if (o instanceof Line2D) {
                 var line = <Line2D>o;
                 if (line.contains(this)) {
-                    return true;
+                    return false;
                 }
                 if (line.isHorizontal()) {
                     return this.y < line.yIntercept();
@@ -85,21 +97,44 @@ export module xross {
         }
 
         public getHashCode(): number {
-            return (this.x * 23000) ^ (this.y * 17000);
+            // We do not use a rational type as the original does.
+            // So we make use of the feature that a double can also
+            // be used as a key. However the hash function must avoid
+            // most of the collision. Since we cannot split the
+            // doubles into numerators and denumerators, we cannot
+            // use the bitwise exclusive or (XOR) to manipulate them,
+            // since the integers are 32-bit and roughly do a bitwise
+            // or (OR) will truncate the tails and lead to a bunch of
+            // data loss in order to compute a hash. After several
+            // tests I chose the following function (simple adding)
+            // as the hash function. Quite simple but works well in
+            // most conditions.
+            //return this.x * 2147483647 + this.y;
+            return this._hashCode;
         }
+
+        public toString(): string {
+            return "(" + this.x + "," + this.y + ")";
+        }
+
+        private _hashCode: number;
 
     }
 
     export class Line2D implements IHashCodeProvider {
 
-        public constructor(p1: Point2D|number, p2: Point2D) {
-            if (<any>p1 instanceof Point2D) {
-                this.slope = Line2D.calculateSlope(<Point2D>p1, p2);
-                this.constant = this.calculateConstant(<Point2D>p1);
+        public constructor(p1OrSlope: Point2D|number, p2: Point2D) {
+            if (<any>p1OrSlope instanceof Point2D) {
+                if ((<Point2D>p1OrSlope).equals(p2)) {
+                    throw new ArgumentError("Cannot create a line made of 2 same points.")
+                }
+                this.slope = Line2D.calculateSlope(<Point2D>p1OrSlope, p2);
+                this.constant = this.calculateConstant(<Point2D>p1OrSlope);
             } else {
-                this.slope = !isFinite(<number>p1) ? +Infinity : <number>p1;
+                this.slope = !isFinite(<number>p1OrSlope) ? +Infinity : <number>p1OrSlope;
                 this.constant = this.calculateConstant(p2);
             }
+            this._hashCode = bkdrHash(this.slope.toString() + " " + this.constant.toString());
         }
 
         public slope: number;
@@ -164,7 +199,11 @@ export module xross {
         }
 
         public getHashCode(): number {
-            return (this.slope * 23000) ^ (this.constant * 37000);
+            // Infinty hash code: 2146435072 (from Java, {Double.POSITIVE_INFINITY}.hashCode())
+            //var xs: number;
+            //xs = isFinite(this.slope) ? this.slope : 2147483648;
+            //return xs * 2147483647 + this.constant;
+            return this._hashCode;
         }
 
         private static calculateSlope(p1: Point2D, p2: Point2D): number {
@@ -179,6 +218,33 @@ export module xross {
             var p: Point2D = new Point2D(x, 0);
             return new Line2D(p, p.translate(0, 1));
         }
+
+        public toString(): string {
+            var s: string = "f(x) -> ";
+            if (this.isVertical()) {
+                s += " x = " + this.constant;
+            } else if (this.isHorizontal()) {
+                s += this.constant;
+            } else {
+                if (this.slope === 1) {
+                    s += "x";
+                } else if (this.slope === -1) {
+                    s += "-x"
+                } else {
+                    s += this.slope + "*x";
+                }
+                if (this.constant !== 0) {
+                    if (this.constant > 0) {
+                        s += " + " + this.constant;
+                    } else {
+                        s += " - " + (-this.constant);
+                    }
+                }
+            }
+            return s;
+        }
+
+        private _hashCode: number;
 
     }
 
@@ -234,10 +300,10 @@ export module xross {
             }
             this.p1 = Extremal.LEFT_LOWER.moreExtremeThan(pa, pb) ? pa : pb;
             this.p2 = (this.p1 === pa ? pb : pa);
-            this.maxX = Math.max(this.p1.x, this.p2.x);
-            this.maxY = Math.max(this.p1.y, this.p2.y);
-            this.minX = Math.min(this.p1.x, this.p2.x);
-            this.minY = Math.min(this.p1.y, this.p2.y);
+            this.maxX = this.p1.x > this.p2.x ? this.p1.x : this.p2.x;
+            this.maxY = this.p1.y > this.p2.y ? this.p1.y : this.p2.y;
+            this.minX = this.p1.x < this.p2.x ? this.p1.x : this.p2.x;
+            this.minY = this.p1.y < this.p2.y ? this.p1.y : this.p2.y;
             this.line = new Line2D(this.p1, this.p2);
         }
 
@@ -247,9 +313,6 @@ export module xross {
             }
             if (o == null) {
                 return false;
-            }
-            if (this === o) {
-                return true;
             }
             return this.p1.equals(o.p1) && this.p2.equals(o.p2);
         }
@@ -267,7 +330,7 @@ export module xross {
                     return this.line.slope === that.line.slope ? null : this.p2;
                 } else {
                     p = this.line.intersection(that.line);
-                    if (p == null || !this.contains(p) || !that.contains(p)) {
+                    if (p === null || !this.contains(p) || !that.contains(p)) {
                         return null;
                     } else {
                         return p;
@@ -281,7 +344,7 @@ export module xross {
                     return p;
                 }
             } else {
-                return null;
+                throw new ArgumentError("What is the type?");
             }
         }
 
@@ -290,9 +353,9 @@ export module xross {
         }
 
         public contains(p: Point2D): boolean {
-            return (this.p1.equals(p) || this.p2.equals(p) ||
+            return (this.p1.equals(p) || this.p2.equals(p)) ||
                 (this.line.contains(p) &&
-                    (p.x >= this.minX && p.x <= this.maxX && p.y >= this.minY && p.y <= this.maxY)));
+                    (p.x >= this.minX && p.x <= this.maxX && p.y >= this.minY && p.y <= this.maxY));
         }
 
         public hasEnding(p: Point2D): boolean {
@@ -310,6 +373,10 @@ export module xross {
         public minX: number;
         public maxY: number;
         public minY: number;
+
+        public toString(): string {
+            return this.p1.toString() + "~" + this.p2.toString();
+        }
 
     }
 
@@ -344,9 +411,9 @@ export module xross {
                 var thatSlope: number = that.segment.line.slope;
                 if (thisSlope !== thatSlope) {
                     if (this.sweepLine.isBefore()) {
-                        return thisSlope > thatSlope ? 1 : -1;
-                    } else {
                         return thisSlope > thatSlope ? -1 : 1;
+                    } else {
+                        return thisSlope > thatSlope ? 1 : -1;
                     }
                 }
                 var deltaXP1: number = this.segment.p1.x - that.segment.p1.x;
@@ -384,6 +451,10 @@ export module xross {
         public segment: LineSegment2D;
         protected sweepLine: SweepLine;
 
+        public toString(): string {
+            return "{" + this.type + ", " + this.point.toString() + ", " + this.segment.toString() + "}";
+        }
+
     }
 
     export class EventQueue {
@@ -392,7 +463,7 @@ export module xross {
             if (segments.size() <= 0) {
                 throw new ArgumentError("Segments cannot be empty.");
             }
-            this._events = new XTreeMap<Point2D, Array<FutureEvent>>({
+            this._events = new ObjectTreeMap<Point2D, Array<FutureEvent>>({
                 compare: function(a: Point2D, b: Point2D): number {
                     var dx: number = a.x > b.x ? 1 : (a.x < b.x ? -1 : 0);
                     return dx !== 0 ? dx : (a.y > b.y ? 1 : (a.y < b.y ? -1 : 0));
@@ -409,8 +480,10 @@ export module xross {
             if (this.isEmpty()) {
                 throw new Error("Oops, I'm empty.");
             }
-            //return new Set<FutureEvent>(this._events.pollFirstEntry());
-            var set: ISet<FutureEvent> = new XSet<FutureEvent>();
+            // 这里应该使用有序的 Set<>（迭代按照输入顺序）
+            // http://www.cnblogs.com/Terry-greener/archive/2011/12/02/2271707.html
+            // 原语句：return new LinkedHashSet<Event>(entry.getValue());
+            var set: ISet<FutureEvent> = new LinkedObjectSet<FutureEvent>();
             arrayToSet(this._events.pollFirstEntry(), set);
             return set;
         }
@@ -432,8 +505,8 @@ export module xross {
         private init(segments: ISet<LineSegment2D>, line: SweepLine): void {
             var minY: number = +Infinity, maxY: number = -Infinity;
             var minDeltaX: number = +Infinity;
-            var xs: PTreeSet<number> = new PTreeSet<number>();
-            segments.forEach((s, k, set) => {
+            var xs: PrimitiveTreeSet<number> = new PrimitiveTreeSet<number>();
+            segments.forEach((s) => {
                 xs.set(s.p1.x);
                 xs.set(s.p2.x);
                 if (s.minY < minY) {
@@ -455,26 +528,23 @@ export module xross {
             var deltaY: number = maxY - minY;
             // TODO: WTF?
             var slope: number = deltaY / minDeltaX * (-1000);
-            line.setLine(new Line2D(slope, new Point2D()));
+            line.setLine(new Line2D(slope, Point2D.ORIGIN));
             line.setQueue(this);
         }
 
-        private _events: XTreeMap<Point2D, Array<FutureEvent>>;
+        private _events: ObjectTreeMap<Point2D, Array<FutureEvent>>;
 
     }
 
     export class SweepLine {
 
         public constructor(ignoreEndings: boolean = false) {
-            this._events = new XTreeSet<FutureEvent>({
+            this._events = new ObjectTreeSet<FutureEvent>({
                 compare: function(a: FutureEvent, b: FutureEvent): number {
-                    if (a === b || a.equals(b)) {
-                        return 0;
-                    }
                     return a.compareTo(b);
                 }
             });
-            this._intersections = new XMap<Point2D, ISet<FutureEvent>>();
+            this._intersections = new ObjectMap<Point2D, ISet<FutureEvent>>();
             this._sweepLine = null;
             this._currentEventPoint = null;
             this._before = true;
@@ -486,6 +556,9 @@ export module xross {
                 return this.handleSingleEvent(<FutureEvent>aev);
             } else {
                 var events = <ISet<FutureEvent>>aev;
+                if (events.size() === 0) {
+                    return;
+                }
                 var array: Array<FutureEvent> = arrayFromSet(events);
                 this.sweepTo(array[0]);
                 if (!this._ignoreSegmentEndings && events.size() > 1) {
@@ -535,9 +608,9 @@ export module xross {
         }
 
         public getIntersections(): IMap<Point2D, ISet<LineSegment2D>> {
-            var segments: IMap<Point2D, ISet<LineSegment2D>> = new XMap<Point2D, ISet<LineSegment2D>>();
-            this._intersections.forEach((v, k, map) => {
-                var set = new XSet<LineSegment2D>();
+            var segments: IMap<Point2D, ISet<LineSegment2D>> = new ObjectMap<Point2D, ISet<LineSegment2D>>();
+            this._intersections.forEach((v, k) => {
+                var set: ISet<LineSegment2D> = new ObjectSet<LineSegment2D>();
                 v.forEach((e) => {
                     set.set(e.segment);
                 });
@@ -580,7 +653,7 @@ export module xross {
             var existing: ISet<FutureEvent> = this._intersections.get(p);
             this._intersections.delete(p);
             if (existing === null || existing === undefined) {
-                existing = new XSet<FutureEvent>();
+                existing = new ObjectSet<FutureEvent>();
             }
             existing.set(a);
             existing.set(b);
@@ -612,13 +685,25 @@ export module xross {
             this._sweepLine = new Line2D(this._sweepLine.slope, this._currentEventPoint);
         }
 
-        private _events: XTreeSet<FutureEvent>;
+        private _events: ObjectTreeSet<FutureEvent>;
         private _intersections: IMap<Point2D, ISet<FutureEvent>>;
         private _sweepLine: Line2D;
         private _currentEventPoint: Point2D;
         private _before: boolean;
         protected _queue: EventQueue;
         private _ignoreSegmentEndings: boolean;
+
+        public toString(): string {
+            var s: string = "SweepLine {\n";
+            s += "  line          = " + this._sweepLine.toString() + "\n";
+            s += "  intersections = " + this.getIntersections().toString() + "\n";
+            var reserved: Array<FutureEvent> = arrayFromSet(this._events);
+            reserved.forEach((e) => {
+                s += "  " + e.toString() + "\n";
+            });
+            s += "}";
+            return s;
+        }
 
     }
 

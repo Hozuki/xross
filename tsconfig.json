@@ -5,7 +5,6 @@
         "noEmitOnError": true,
         "module": "commonjs",
         "removeComments": true,
-        "sourceMap": true,
-        "outDir": "./build/"
+        "sourceMap": true
     }
 }

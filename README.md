@@ -21,5 +21,9 @@ tsc -p .
 
 ## Testing
 
-Use [Electron](http://electron.atom.io/) or [nw.js](http://nwjs.io/) to load
-the test page `test/index.html` and access xross from the object `xross`.
+Run `test/boot.js`:
+
+```
+cd /path/to/project/
+node test/boot.js
+```

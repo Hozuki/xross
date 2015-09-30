@@ -1,0 +1,26 @@
+{
+  "name": "xross",
+  "version": "0.1.0",
+  "description": "Detect line segment crossings",
+  "dependencies": {},
+  "devDependencies": {},
+  "scripts": {
+    "test": ""
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Hozuki/xross.git"
+  },
+  "keywords": [
+    "Bentley-Ottmann",
+    "line segment",
+    "crossing detect"
+  ],
+  "author": "George Wu <uiharu@buaa.edu.cn>",
+  "license": "MIT",
+  "readme": "README.md",
+  "bugs": {
+    "url": "https://github.com/Hozuki/xross/issues"
+  },
+  "homepage": "https://github.com/Hozuki/xross#readme"
+}

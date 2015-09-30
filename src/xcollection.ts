@@ -1,6 +1,4 @@
-//import {IComparable, IComparer, DefaultComparer, NotImplementedError} from "./xcommon";
 
-//import * as xcommon from "./xcommon";
 import xcommon = require("./xcommon");
 
 export module xross {
@@ -9,6 +7,7 @@ export module xross {
 
     import ArgumentError = xcommon.xross.ArgumentError;
     import NotImplementedError = xcommon.xross.NotImplementedError;
+    import InvalidOperationError = xcommon.xross.InvalidOperationError;
     import IComparer = xcommon.xross.IComparer;
 
     export interface ISet<T> {
@@ -21,6 +20,7 @@ export module xross {
         set(item: T): void;
         size(): number;
         isEmpty(): boolean;
+        toString(): string;
 
     }
 
@@ -34,6 +34,7 @@ export module xross {
         set(key: K, value: V): void;
         size(): number;
         isEmpty(): boolean;
+        toString(): string;
 
     }
 
@@ -44,14 +45,14 @@ export module xross {
     }
 
     // Naive (too young too simple, sometimes naive)
-    interface NHashCodeProvider<T> {
+    interface INaiveHashCodeProvider<T> {
 
         getHashCode(o: T): number;
 
     }
 
     // X
-    class XHashCodeProvider<T> implements NHashCodeProvider<T> {
+    class ObjectHashCodeProvider<T> implements INaiveHashCodeProvider<T> {
 
         public getHashCode(o: T): number {
             return (<any>o).getHashCode();
@@ -60,7 +61,7 @@ export module xross {
     }
 
     // Primitives
-    class PHashCodeProvider<T> implements NHashCodeProvider<T> {
+    class PrimitiveHashCodeProvider<T> implements INaiveHashCodeProvider<T> {
 
         public getHashCode(o: T): number {
             return <number><any>o;
@@ -68,9 +69,9 @@ export module xross {
 
     }
 
-    class NSet<T> implements ISet<T>{
+    class SetBase<T> implements ISet<T> {
 
-        public constructor(provider: NHashCodeProvider<T>) {
+        public constructor(provider: INaiveHashCodeProvider<T>) {
             this._p = provider;
             this._o = Object.create(null);
             this._count = 0;
@@ -100,7 +101,13 @@ export module xross {
         }
 
         public get(item: T): T {
-            return this._o[this._p.getHashCode(item)];
+            var hashCode: number = this._p.getHashCode(item);
+            if (this.hasHashCode(hashCode)) {
+                return this._o[hashCode];
+            } else {
+                // HACK: should return undefined
+                return null;
+            }
         }
 
         public has(item: T): boolean {
@@ -128,15 +135,23 @@ export module xross {
             return this._count <= 0;
         }
 
-        protected _p: NHashCodeProvider<T>;
+        protected _p: INaiveHashCodeProvider<T>;
         protected _o: any;
         protected _count: number;
 
+        public toString(): string {
+            var s: string = "";
+            this.forEach((v) => {
+                s += v.toString() + " ";
+            });
+            return s;
+        }
+
     }
 
-    class NMap<K, V> implements IMap<K, V>{
+    class MapBase<K, V> implements IMap<K, V> {
 
-        public constructor(provider: NHashCodeProvider<K>) {
+        public constructor(provider: INaiveHashCodeProvider<K>) {
             this._p = provider;
             this._o = Object.create(null);
             this._count = 0;
@@ -166,7 +181,13 @@ export module xross {
         }
 
         public get(key: K): V {
-            return this._o[this._p.getHashCode(key)].value;
+            var obj = this._o[this._p.getHashCode(key)];
+            if (obj != null) {
+                return obj.value;
+            } else {
+                // HACK: should return undefined
+                return null;
+            }
         }
 
         public has(key: K): boolean {
@@ -180,13 +201,10 @@ export module xross {
         public set(key: K, value: V): void {
             var hashCode: number = this._p.getHashCode(key);
             var b = this.hasHashCode(hashCode);
-            //var v: V = null;
             if (!b) {
-                //v = this._o[hashCode].value;
                 this._o[hashCode] = { key: key, value: value };
                 this._count++;
             }
-            //return v;
         }
 
         public size(): number {
@@ -197,9 +215,88 @@ export module xross {
             return this._count <= 0;
         }
 
-        protected _p: NHashCodeProvider<K>;
+        protected _p: INaiveHashCodeProvider<K>;
         protected _o: any;
         protected _count: number;
+
+        public toString(): string {
+            var s: string = "";
+            this.forEach((v) => {
+                s += v.toString() + " ";
+            });
+            return s;
+        }
+
+    }
+
+    class LinkedSetBase<T> implements ISet<T> {
+
+        public constructor(provider: INaiveHashCodeProvider<T>) {
+            this._hashCodeProvider = provider;
+            this._o = [];
+            this._h = [];
+        }
+
+        public clear(): void {
+            var len: number = this._o.length;
+            for (var i: number = 0; i < len; i++) {
+                this._o.pop();
+                this._h.pop();
+            }
+        }
+
+        public delete(key: T): boolean {
+            var index: number = this._h.indexOf(this._hashCodeProvider.getHashCode(key));
+            if (index >= 0) {
+                this._o.splice(index, 1);
+                this._h.splice(index, 1);
+            } else {
+                return false;
+            }
+        }
+
+        public forEach(fn: (value: T, key?: T, set?: ISet<T>) => void): void {
+            var i: number = 0;
+            for (var i = 0; i < this._o.length; i++) {
+                fn(this._o[i], this._o[i], this);
+            }
+        }
+
+        public get(key: T): T {
+            var index: number = this._h.indexOf(this._hashCodeProvider.getHashCode(key));
+            if (index >= 0) {
+                return this._o[index];
+            } else {
+                return null;
+            }
+        }
+
+        public has(key: T): boolean {
+            return this._h.indexOf(this._hashCodeProvider.getHashCode(key)) >= 0;
+        }
+
+        public set(key: T): void {
+            var hashCode = this._hashCodeProvider.getHashCode(key);
+            var index: number = this._h.indexOf(hashCode);
+            if (index >= 0) {
+                this._o[index] = key;
+            } else {
+                this._o.push(key);
+                this._h.push(hashCode);
+            }
+        }
+
+        public size(): number {
+            return this._o.length;
+        }
+
+        public isEmpty(): boolean {
+            return this._o.length <= 0;
+        }
+
+        private _hashCodeProvider: INaiveHashCodeProvider<T>;
+        private _o: Array<T>;
+        private _h: Array<number>;
 
     }
 
@@ -232,7 +329,7 @@ export module xross {
         return n === null ? BLACK : n.color;
     }
 
-    class NTreeBase<K, V>{
+    class TreeCollectionBase<K, V>{
 
         public constructor(comparer: IComparer<K>) {
             this._comparer = comparer;
@@ -314,49 +411,7 @@ export module xross {
             }
         }
 
-        protected fixAfterInsertion(node: RBNode<K, V>): void {
-            node.color = RED;
-            var y: RBNode<K, V>;
-            // The root of red-black tree is always black, so accessing node.parent.parent is always all right.
-            while (node !== null && node !== this._root && colorOf(node.parent) === RED) {
-                if (node.parent === node.parent.parent.left) {
-                    y = node.parent.parent.right;
-                    if (colorOf(y) === RED) {
-                        setColor(node.parent, BLACK);
-                        setColor(y, BLACK);
-                        setColor(node.parent.parent, RED);
-                        node = node.parent.parent;
-                    } else {
-                        if (node === node.parent.right) {
-                            node = node.parent;
-                            this.rotateLeft(node);
-                        }
-                        setColor(node.parent, BLACK);
-                        setColor(node.parent.parent, RED);
-                        this.rotateRight(node.parent.parent);
-                    }
-                } else {
-                    y = node.parent.parent.left;
-                    if (colorOf(y) === RED) {
-                        setColor(node.parent, BLACK);
-                        setColor(y, BLACK);
-                        setColor(node.parent.parent, RED);
-                        node = node.parent.parent;
-                    } else {
-                        if (node === node.parent.left) {
-                            node = node.parent;
-                            this.rotateRight(node);
-                        }
-                        setColor(node.parent, BLACK);
-                        setColor(node.parent.parent, RED);
-                        this.rotateLeft(node.parent.parent);
-                    }
-                }
-            }
-            this._root.color = BLACK;
-        }
-
-        protected successor(t: RBNode<K, V>): RBNode<K, V> {
+        protected static successor<K, V>(t: RBNode<K, V>): RBNode<K, V> {
             var p: RBNode<K, V>, ch: RBNode<K, V>;
             if (t === null) {
                 return null;
@@ -377,49 +432,52 @@ export module xross {
             }
         }
 
-        protected rotateLeft(node: RBNode<K, V>): void {
-            if (node !== null) {
-                var r: RBNode<K, V> = node.right;
-                node.right = r.left;
+        protected rotateLeft(p: RBNode<K, V>): void {
+            if (p !== null) {
+                var r: RBNode<K, V> = p.right;
+                p.right = r.left;
                 if (r.left !== null) {
-                    r.left.parent = node;
+                    r.left.parent = p;
                 }
-                r.parent = node.parent;
-                if (node.parent === null) {
+                r.parent = p.parent;
+                if (p.parent === null) {
                     this._root = r;
-                } else if (node.parent.left === node) {
-                    node.parent.left = r;
+                } else if (p.parent.left === p) {
+                    p.parent.left = r;
                 } else {
-                    node.parent.right = r;
+                    p.parent.right = r;
                 }
-                r.left = node;
-                node.parent = r;
+                r.left = p;
+                p.parent = r;
             }
         }
 
-        protected rotateRight(node: RBNode<K, V>): void {
-            if (node !== null) {
-                var l: RBNode<K, V> = node.left;
-                node.left = l.right;
+        protected rotateRight(p: RBNode<K, V>): void {
+            if (p !== null) {
+                var l: RBNode<K, V> = p.left;
+                p.left = l.right;
                 if (l.right !== null) {
-                    l.right.parent = node;
+                    l.right.parent = p;
                 }
-                l.parent = node.parent;
-                if (node.parent === null) {
+                l.parent = p.parent;
+                if (p.parent === null) {
                     this._root = l;
-                } else if (node.parent.right === node) {
-                    node.parent.right = l;
+                } else if (p.parent.right === p) {
+                    p.parent.right = l;
                 } else {
-                    node.parent.left = l;
+                    p.parent.left = l;
                 }
-                l.right = node;
-                node.parent = l;
+                l.right = p;
+                p.parent = l;
             }
         }
 
         protected deleteNode(p: RBNode<K, V>): void {
-            if (p.left === null && p.right !== null) {
-                var s: RBNode<K, V> = this.successor(p);
+            if (p === null) {
+                return;
+            }
+            if (p.left !== null && p.right !== null) {
+                var s: RBNode<K, V> = TreeCollectionBase.successor(p);
                 p.key = s.key;
                 p.value = s.value;
                 p = s;
@@ -461,12 +519,13 @@ export module xross {
                 return null;
             }
             var n: RBNode<K, V> = this._root;
-            if (this._comparer !== null) {
+            var comparer: IComparer<K> = this._comparer;
+            if (comparer !== null) {
                 while (n !== null) {
-                    cmp = this._comparer.compare(n.key, key);
+                    cmp = comparer.compare(key, n.key);
                     if (cmp === 0) {
                         return n;
-                    } else if (cmp > 0) {
+                    } else if (cmp < 0) {
                         n = n.left;
                     } else {
                         n = n.right;
@@ -475,10 +534,10 @@ export module xross {
                 return null;
             } else {
                 while (n !== null) {
-                    cmp = n.key > key ? 1 : (n.key < key ? -1 : 0);
+                    cmp = key > n.key ? 1 : (key < n.key ? -1 : 0);
                     if (cmp === 0) {
                         return n;
-                    } else if (cmp > 0) {
+                    } else if (cmp < 0) {
                         n = n.left;
                     } else {
                         n = n.right;
@@ -486,6 +545,48 @@ export module xross {
                 }
                 return null;
             }
+        }
+
+        protected fixAfterInsertion(x: RBNode<K, V>): void {
+            x.color = RED;
+            var y: RBNode<K, V>;
+            // The root of red-black tree is always black, so accessing node.parent.parent is always all right.
+            while (x !== null && x !== this._root && colorOf(x.parent) === RED) {
+                if (x.parent === x.parent.parent.left) {
+                    y = x.parent.parent.right;
+                    if (colorOf(y) === RED) {
+                        setColor(x.parent, BLACK);
+                        setColor(y, BLACK);
+                        setColor(x.parent.parent, RED);
+                        x = x.parent.parent;
+                    } else {
+                        if (x === x.parent.right) {
+                            x = x.parent;
+                            this.rotateLeft(x);
+                        }
+                        setColor(x.parent, BLACK);
+                        setColor(x.parent.parent, RED);
+                        this.rotateRight(x.parent.parent);
+                    }
+                } else {
+                    y = x.parent.parent.left;
+                    if (colorOf(y) === RED) {
+                        setColor(x.parent, BLACK);
+                        setColor(y, BLACK);
+                        setColor(x.parent.parent, RED);
+                        x = x.parent.parent;
+                    } else {
+                        if (x === x.parent.left) {
+                            x = x.parent;
+                            this.rotateRight(x);
+                        }
+                        setColor(x.parent, BLACK);
+                        setColor(x.parent.parent, RED);
+                        this.rotateLeft(x.parent.parent);
+                    }
+                }
+            }
+            this._root.color = BLACK;
         }
 
         protected fixAfterDeletion(x: RBNode<K, V>): void {
@@ -544,17 +645,17 @@ export module xross {
             setColor(x, BLACK);
         }
 
-        protected buildQueryQueue(mid: RBNode<K, V>): Array<RBNode<K, V>> {
+        protected static buildQueryQueue<K, V>(mid: RBNode<K, V>): Array<RBNode<K, V>> {
             var ql: Array<RBNode<K, V>>, qr: Array<RBNode<K, V>>;
             if (mid.left === null) {
                 ql = [];
             } else {
-                ql = this.buildQueryQueue(mid.left);
+                ql = TreeCollectionBase.buildQueryQueue(mid.left);
             }
             if (mid.right === null) {
                 qr = [];
             } else {
-                qr = this.buildQueryQueue(mid.right);
+                qr = TreeCollectionBase.buildQueryQueue(mid.right);
             }
             return ql.concat(mid, <any>qr);
         }
@@ -566,20 +667,22 @@ export module xross {
                 this._root = RB.create(key, value, null);
                 this._size = 1;
                 this._modCount++;
-                return null;
+                //return null;
+                return;
             }
             var cmp: number;
             var parent: RBNode<K, V>;
-            if (this._comparer !== null) {
+            var comparer: IComparer<K> = this._comparer;
+            if (comparer !== null) {
                 do {
                     parent = t;
-                    cmp = this._comparer.compare(key, t.key);
+                    cmp = comparer.compare(key, t.key);
                     if (cmp < 0) {
                         t = t.left;
                     } else if (cmp > 0) {
                         t = t.right;
                     } else {
-                        var v = t.value;
+                        //var v: V = t.value;
                         t.value = value;
                         //return v;
                         return;
@@ -616,26 +719,27 @@ export module xross {
             //return null;
         }
 
-        protected getHigherEntry(key: K): RBNode<K, V> {
-            var node: RBNode<K, V> = this._root;
+        protected getHigherNode(key: K): RBNode<K, V> {
+            var p: RBNode<K, V> = this._root;
             var cmp: number;
             var parent: RBNode<K, V>, ch: RBNode<K, V>;
-            if (this._comparer !== null) {
-                while (node !== null) {
-                    cmp = this._comparer.compare(key, node.key);
+            var comparer: IComparer<K> = this._comparer;
+            if (comparer !== null) {
+                while (p !== null) {
+                    cmp = comparer.compare(key, p.key);
                     if (cmp < 0) {
-                        if (node.left !== null) {
-                            node = node.left;
+                        if (p.left !== null) {
+                            p = p.left;
                         } else {
-                            return node;
+                            return p;
                         }
                     } else {
-                        if (node.right !== null) {
-                            node = node.right;
+                        if (p.right !== null) {
+                            p = p.right;
                         } else {
-                            parent = node.parent;
-                            ch = node;
-                            while (parent !== null && ch !== parent.right) {
+                            parent = p.parent;
+                            ch = p;
+                            while (parent !== null && ch === parent.right) {
                                 ch = parent;
                                 parent = parent.parent;
                             }
@@ -645,21 +749,21 @@ export module xross {
                 }
                 return null;
             } else {
-                while (node !== null) {
-                    cmp = key > node.key ? 1 : (key < node.key ? -1 : 0);
+                while (p !== null) {
+                    cmp = key > p.key ? 1 : (key < p.key ? -1 : 0);
                     if (cmp < 0) {
-                        if (node.left !== null) {
-                            node = node.left;
+                        if (p.left !== null) {
+                            p = p.left;
                         } else {
-                            return node;
+                            return p;
                         }
                     } else {
-                        if (node.right !== null) {
-                            node = node.right;
+                        if (p.right !== null) {
+                            p = p.right;
                         } else {
-                            parent = node.parent;
-                            ch = node;
-                            while (parent !== null && ch !== parent.right) {
+                            parent = p.parent;
+                            ch = p;
+                            while (parent !== null && ch === parent.right) {
                                 ch = parent;
                                 parent = parent.parent;
                             }
@@ -671,26 +775,27 @@ export module xross {
             }
         }
 
-        protected getLowerEntry(key: K): RBNode<K, V> {
-            var node: RBNode<K, V> = this._root;
+        protected getLowerNode(key: K): RBNode<K, V> {
+            var p: RBNode<K, V> = this._root;
             var cmp: number;
             var parent: RBNode<K, V>, ch: RBNode<K, V>;
-            if (this._comparer !== null) {
-                while (node !== null) {
-                    cmp = this._comparer.compare(key, node.key);
+            var comparer: IComparer<K> = this._comparer;
+            if (comparer !== null) {
+                while (p !== null) {
+                    cmp = comparer.compare(key, p.key);
                     if (cmp > 0) {
-                        if (node.right !== null) {
-                            node = node.right;
+                        if (p.right !== null) {
+                            p = p.right;
                         } else {
-                            return node;
+                            return p;
                         }
                     } else {
-                        if (node.left !== null) {
-                            node = node.left;
+                        if (p.left !== null) {
+                            p = p.left;
                         } else {
-                            parent = node.parent;
-                            ch = node;
-                            while (parent !== null && ch !== parent.right) {
+                            parent = p.parent;
+                            ch = p;
+                            while (parent !== null && ch === parent.left) {
                                 ch = parent;
                                 parent = parent.parent;
                             }
@@ -700,21 +805,21 @@ export module xross {
                 }
                 return null;
             } else {
-                while (node !== null) {
-                    cmp = key > node.key ? 1 : (key < node.key ? -1 : 0);
+                while (p !== null) {
+                    cmp = key > p.key ? 1 : (key < p.key ? -1 : 0);
                     if (cmp > 0) {
-                        if (node.right !== null) {
-                            node = node.right;
+                        if (p.right !== null) {
+                            p = p.right;
                         } else {
-                            return node;
+                            return p;
                         }
                     } else {
-                        if (node.left !== null) {
-                            node = node.left;
+                        if (p.left !== null) {
+                            p = p.left;
                         } else {
-                            parent = node.parent;
-                            ch = node;
-                            while (parent !== null && ch !== parent.right) {
+                            parent = p.parent;
+                            ch = p;
+                            while (parent !== null && ch === parent.left) {
                                 ch = parent;
                                 parent = parent.parent;
                             }
@@ -733,18 +838,14 @@ export module xross {
 
     }
 
-    class NTreeSet<T> extends NTreeBase<T, T> implements ISet<T>{
+    class TreeSetBase<T> extends TreeCollectionBase<T, T> implements ISet<T>{
 
         public constructor(comparer: IComparer<T>) {
             super(comparer);
         }
 
-        public delete(item: T): boolean {
-            return super.delete(item);
-        }
-
         public forEach(callbackfn: (item: T, index?: T, set?: ISet<T>) => void): void {
-            var queue: Array<RBNode<T, T>> = this.buildQueryQueue(this._root);
+            var queue: Array<RBNode<T, T>> = TreeCollectionBase.buildQueryQueue(this._root);
             var len: number = queue.length;
             for (var i: number = 0; i < len; i++) {
                 callbackfn(queue[i].value, queue[i].key, this);
@@ -756,7 +857,7 @@ export module xross {
         }
 
         public higher(item: T): T {
-            var node: RBNode<T, T> = this.getHigherEntry(item);
+            var node: RBNode<T, T> = this.getHigherNode(item);
             if (node !== null) {
                 return node.value;
             } else {
@@ -765,7 +866,7 @@ export module xross {
         }
 
         public lower(item: T): T {
-            var node: RBNode<T, T> = this.getLowerEntry(item);
+            var node: RBNode<T, T> = this.getLowerNode(item);
             if (node !== null) {
                 return node.value;
             } else {
@@ -775,57 +876,89 @@ export module xross {
 
         protected _comparer: IComparer<T>;
 
+        public toString(): string {
+            var s: string = "";
+            this.forEach((v) => {
+                s += v.toString() + " ";
+            });
+            return s;
+        }
+
     }
 
-    class NTreeMap<K, V> extends NTreeBase<K, V> implements IMap<K, V>{
+    class TreeMapBase<K, V> extends TreeCollectionBase<K, V> implements IMap<K, V>{
 
         public constructor(comparer: IComparer<K>) {
             super(comparer);
         }
 
         public forEach(callbackfn: (value: V, index?: K, map?: IMap<K, V>) => void): void {
-            var queue: Array<RBNode<K, V>> = this.buildQueryQueue(this._root);
+            var queue: Array<RBNode<K, V>> = TreeCollectionBase.buildQueryQueue(this._root);
             var len: number = queue.length;
             for (var i: number = 0; i < len; i++) {
                 callbackfn(queue[i].value, queue[i].key, this);
             }
         }
 
-    }
-
-    export class XSet<T> extends NSet<T> {
-
-        public constructor() {
-            super(new XHashCodeProvider<T>());
+        public toString(): string {
+            var s: string = "";
+            this.forEach((v) => {
+                s += v.toString() + " ";
+            });
+            return s;
         }
 
     }
 
-    export class XMap<K, V> extends NMap<K, V> {
+    export class ObjectSet<T> extends SetBase<T> {
 
         public constructor() {
-            super(new XHashCodeProvider<K>());
+            super(new ObjectHashCodeProvider<T>());
         }
 
     }
 
-    export class PSet<T> extends NSet<T> {
+    export class ObjectMap<K, V> extends MapBase<K, V> {
 
         public constructor() {
-            super(new PHashCodeProvider<T>());
+            super(new ObjectHashCodeProvider<K>());
         }
 
     }
 
-    export class PMap<K, V> extends NMap<K, V> {
+    export class PrimitiveSet<T> extends SetBase<T> {
 
         public constructor() {
-            super(new PHashCodeProvider<K>());
+            super(new PrimitiveHashCodeProvider<T>());
         }
 
     }
 
-    export class XTreeSet<T> extends NTreeSet<T> {
+    export class PrimitiveMap<K, V> extends MapBase<K, V> {
+
+        public constructor() {
+            super(new PrimitiveHashCodeProvider<K>());
+        }
+
+    }
+
+    export class LinkedObjectSet<T> extends LinkedSetBase<T> {
+
+        public constructor() {
+            super(new ObjectHashCodeProvider());
+        }
+
+    }
+
+    export class LinkedPrimitiveSet<T> extends LinkedSetBase<T> {
+
+        public constructor() {
+            super(new PrimitiveHashCodeProvider());
+        }
+
+    }
+
+    export class ObjectTreeSet<T> extends TreeSetBase<T> {
 
         public constructor(comparer: IComparer<T> = null) {
             super(comparer);
@@ -833,7 +966,7 @@ export module xross {
 
     }
 
-    export class XTreeMap<K, V> extends NTreeMap<K, V> {
+    export class ObjectTreeMap<K, V> extends TreeMapBase<K, V> {
 
         public constructor(comparer: IComparer<K> = null) {
             super(comparer);
@@ -841,7 +974,7 @@ export module xross {
 
     }
 
-    export class PTreeSet<T> extends NTreeSet<T> {
+    export class PrimitiveTreeSet<T> extends TreeSetBase<T> {
 
         public constructor(comparer: IComparer<T> = null) {
             super(comparer);
@@ -849,7 +982,7 @@ export module xross {
 
     }
 
-    export class PTreeMap<K, V> extends NTreeMap<K, V> {
+    export class PrimitiveTreeMap<K, V> extends TreeMapBase<K, V> {
 
         public constructor(comparer: IComparer<K> = null) {
             super(comparer);
@@ -858,7 +991,7 @@ export module xross {
     }
 
     export function keySet<K, V>(m: IMap<K, V>): ISet<K> {
-        var ret: ISet<K> = new XSet<K>();
+        var ret: ISet<K> = new ObjectSet<K>();
         m.forEach((v, k) => {
             ret.set(k);
         });

@@ -12,4 +12,8 @@ nwjs
 # Files ruined during my test (my bad)
 
 gulpfile.js
-package.json
+
+# TypeScript generated (temporary)
+
+src/*.js
+src/*.js.map
