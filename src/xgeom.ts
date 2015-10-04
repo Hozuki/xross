@@ -11,7 +11,7 @@ export module xross {
     import IComparer = xcommon.xross.IComparer;
     import ArgumentError = xcommon.xross.ArgumentError;
     import NotImplementedError = xcommon.xross.NotImplementedError;
-    import IHashCodeProvider = xcollection.xross.IHashCodeProvider;
+    import IHashCodeProvider = xcommon.xross.IHashCodeProvider;
     import ISet = xcollection.xross.ISet;
     import IMap = xcollection.xross.IMap;
     import ObjectSet = xcollection.xross.ObjectSet;
@@ -27,7 +27,7 @@ export module xross {
     function bkdrHash(s: string): number {
         var r: number = 0;
         for (var i: number = 0; i < s.length; i++) {
-            r = (r * 131 + s.charCodeAt(i)) & 0xffffffff;
+            r = (r * 13131 + s.charCodeAt(i)) & 0x7fffffff;
         }
         return r;
     }
@@ -101,7 +101,7 @@ export module xross {
             // So we make use of the feature that a double can also
             // be used as a key. However the hash function must avoid
             // most of the collision. Since we cannot split the
-            // doubles into numerators and denumerators, we cannot
+            // doubles into numerators and denominators, we cannot
             // use the bitwise exclusive or (XOR) to manipulate them,
             // since the integers are 32-bit and roughly do a bitwise
             // or (OR) will truncate the tails and lead to a bunch of
@@ -121,7 +121,7 @@ export module xross {
 
     }
 
-    export class Line2D implements IHashCodeProvider {
+    export class Line2D implements IEquatable<Line2D>, IHashCodeProvider {
 
         public constructor(p1OrSlope: Point2D|number, p2: Point2D) {
             if (<any>p1OrSlope instanceof Point2D) {
@@ -204,6 +204,16 @@ export module xross {
             //xs = isFinite(this.slope) ? this.slope : 2147483648;
             //return xs * 2147483647 + this.constant;
             return this._hashCode;
+        }
+
+        public equals(o: Line2D): boolean {
+            if (this === o) {
+                return true;
+            }
+            if (o == null) {
+                return false;
+            }
+            return this.slope === o.slope && this.constant === o.constant;
         }
 
         private static calculateSlope(p1: Point2D, p2: Point2D): number {
@@ -388,7 +398,7 @@ export module xross {
 
     }
 
-    export class FutureEvent implements IComparable<FutureEvent>, IHashCodeProvider {
+    export class FutureEvent implements IComparable<FutureEvent>, IEquatable<FutureEvent>, IHashCodeProvider {
 
         public constructor(t: FutureEventType, p: Point2D, s: LineSegment2D, sl: SweepLine) {
             this.type = t;
@@ -698,9 +708,9 @@ export module xross {
             s += "  line          = " + this._sweepLine.toString() + "\n";
             s += "  intersections = " + this.getIntersections().toString() + "\n";
             var reserved: Array<FutureEvent> = arrayFromSet(this._events);
-            reserved.forEach((e) => {
-                s += "  " + e.toString() + "\n";
-            });
+            for (var i = 0; i < reserved.length; i++) {
+                s += "  " + reserved[i].toString() + "\n";
+            }
             s += "}";
             return s;
         }

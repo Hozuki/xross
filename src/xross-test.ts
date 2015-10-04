@@ -72,8 +72,8 @@ export module xross {
 			console.time("quick t1");
 			var quick: ISet<Point2D> = BentleyOttmann.intersections(segs);
 			console.timeEnd("quick t1");
-			console.log(naive);
-			console.log(quick);
+			//console.log(naive);
+			//console.log(quick);
 		}
 
 		public static test2(): void {
@@ -87,8 +87,8 @@ export module xross {
 			console.time("quick t2");
 			var quick: ISet<Point2D> = BentleyOttmann.intersections(segs);
 			console.timeEnd("quick t2");
-			console.log(naive);
-			console.log(quick);
+			//console.log(naive);
+			//console.log(quick);
 		}
 
 		public static testSimilarSlopes(): void {
@@ -104,8 +104,8 @@ export module xross {
 			console.time("quick ts");
 			var quick: ISet<Point2D> = BentleyOttmann.intersections(segs);
 			console.timeEnd("quick ts");
-			console.log(naive);
-			console.log(quick);
+			//console.log(naive);
+			//console.log(quick);
 		}
 
 		public static testImpossible(): void {
@@ -119,8 +119,8 @@ export module xross {
 			console.time("quick ti");
 			var quick: ISet<Point2D> = BentleyOttmann.intersections(segs);
 			console.timeEnd("quick ti");
-			console.log(naive);
-			console.log(quick);
+			//console.log(naive);
+			//console.log(quick);
 		}
 
 		public static testRandom(box: number = 1000, numSegments: number = 1000, maxSizeSegments: number = 200, testsToPerform: number = 1, strictRandom: boolean = true): void {

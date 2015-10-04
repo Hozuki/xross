@@ -8,21 +8,15 @@ export module xross {
     import ArgumentError = xcommon.xross.ArgumentError;
     import NotImplementedError = xcommon.xross.NotImplementedError;
     import InvalidOperationError = xcommon.xross.InvalidOperationError;
+    import CollectionChangedError = xcommon.xross.CollectionChangedError;
     import IComparer = xcommon.xross.IComparer;
+    import IHashCodeProvider = xcommon.xross.IHashCodeProvider;
+    import IEquatable = xcommon.xross.IEquatable;
 
-    export interface ISet<T> {
-
-        clear(): void;
-        delete(item: T): boolean;
-        forEach(callbackfn: (item: T, key?: T, set?: ISet<T>) => void): void;
-        get(item: T): T;
-        has(item: T): boolean;
-        set(item: T): void;
-        size(): number;
-        isEmpty(): boolean;
-        toString(): string;
-
-    }
+    /**
+     * Bucket size: 50 ~ 200
+     */
+    const BUCKET_SIZE: number = 73;
 
     export interface IMap<K, V> {
 
@@ -38,29 +32,64 @@ export module xross {
 
     }
 
-    export interface IHashCodeProvider {
+    export interface ISet<T> extends IMap<T, T> {
 
-        getHashCode(): number;
+        forEach(callbackfn: (item: T, key?: T, set?: ISet<T>) => void): void;
+        set(item: T): void;
+
+    }
+
+    interface KVPair<K, V> {
+
+        key: K;
+        value: V;
 
     }
 
     // Naive (too young too simple, sometimes naive)
     interface INaiveHashCodeProvider<T> {
 
+        // Must return a non-negative number
         getHashCode(o: T): number;
 
     }
 
-    // X
+    interface INaiveEqualityComparer<T> {
+
+        equals(a: T, b: T): boolean;
+
+    }
+
+    // For Objects
     class ObjectHashCodeProvider<T> implements INaiveHashCodeProvider<T> {
 
         public getHashCode(o: T): number {
-            return (<any>o).getHashCode();
+            return (<IHashCodeProvider><any>o).getHashCode();
         }
 
     }
 
-    // Primitives
+    class ObjectEqualityComparer<T> {
+
+        public equals(a: T, b: T): boolean {
+            if (a === null || a === undefined) {
+                if (b === null || b === undefined) {
+                    return true;
+                } else {
+                    return false;
+                }
+            } else {
+                if (b === null || b === undefined) {
+                    return false;
+                } else {
+                    return (<IEquatable<T>><any>a).equals(b);
+                }
+            }
+        }
+
+    }
+
+    // For Primitives
     class PrimitiveHashCodeProvider<T> implements INaiveHashCodeProvider<T> {
 
         public getHashCode(o: T): number {
@@ -69,121 +98,92 @@ export module xross {
 
     }
 
-    class SetBase<T> implements ISet<T> {
+    class PrimitiveEqualityComparer<T> {
 
-        public constructor(provider: INaiveHashCodeProvider<T>) {
-            this._p = provider;
-            this._o = Object.create(null);
-            this._count = 0;
-        }
-
-        public clear(): void {
-            for (var key in this._o) {
-                delete this._o[key];
-            }
-            this._count = 0;
-        }
-
-        public delete(item: T): boolean {
-            var hashCode: number = this._p.getHashCode(item);
-            var b = this.hasHashCode(hashCode);
-            if (b) {
-                delete this._o[hashCode];
-                this._count--;
-            }
-            return b;
-        }
-
-        public forEach(callbackfn: (item: T, index?: T, set?: ISet<T>) => void): void {
-            for (var key in this._o) {
-                callbackfn(this._o[key], this._o[key], this);
-            }
-        }
-
-        public get(item: T): T {
-            var hashCode: number = this._p.getHashCode(item);
-            if (this.hasHashCode(hashCode)) {
-                return this._o[hashCode];
+        public equals(a: T, b: T): boolean {
+            if (a === null || a === undefined) {
+                if (b === null || b === undefined) {
+                    return true;
+                } else {
+                    return false;
+                }
             } else {
-                // HACK: should return undefined
-                return null;
+                if (b === null || b === undefined) {
+                    return false;
+                } else {
+                    return a === b;
+                }
             }
-        }
-
-        public has(item: T): boolean {
-            return this._o[this._p.getHashCode(item)] !== undefined;
-        }
-
-        protected hasHashCode(hashCode: number): boolean {
-            return this._o[hashCode] !== undefined;
-        }
-
-        public set(item: T): void {
-            var hashCode: number = this._p.getHashCode(item);
-            var b = this.hasHashCode(hashCode);
-            if (!b) {
-                this._o[hashCode] = item;
-                this._count++;
-            }
-        }
-
-        public size(): number {
-            return this._count;
-        }
-
-        public isEmpty(): boolean {
-            return this._count <= 0;
-        }
-
-        protected _p: INaiveHashCodeProvider<T>;
-        protected _o: any;
-        protected _count: number;
-
-        public toString(): string {
-            var s: string = "";
-            this.forEach((v) => {
-                s += v.toString() + " ";
-            });
-            return s;
         }
 
     }
 
     class MapBase<K, V> implements IMap<K, V> {
 
-        public constructor(provider: INaiveHashCodeProvider<K>) {
+        public constructor(provider: INaiveHashCodeProvider<K>, eq: INaiveEqualityComparer<K>) {
             this._p = provider;
-            this._o = Object.create(null);
-            this._count = 0;
+            this._c = eq;
+            this._modCount = -1;
+            this.clear();
         }
 
         public clear(): void {
-            for (var key in this._o) {
-                delete this._o[key];
-            }
+            this._buckets = new Array<Array<KVPair<K, V>>>(BUCKET_SIZE);
             this._count = 0;
+            this._modCount++;
         }
 
         public delete(key: K): boolean {
             var hashCode: number = this._p.getHashCode(key);
-            var b = this.hasHashCode(hashCode);
-            if (b) {
-                delete this._o[hashCode];
+            var bucketIndex: number = this.getBucketIndexByHashCode(hashCode);
+            var bucket: Array<KVPair<K, V>> = this._buckets[bucketIndex];
+            var b: boolean = false;
+            if (bucket !== undefined) {
+                for (var i: number = 0; i < bucket.length; i++) {
+                    if (this._c.equals(key, bucket[i].key)) {
+                        b = true;
+                        bucket.splice(i, 1);
+                        break;
+                    }
+                }
                 this._count--;
+                // Now we don't delete the array (`delete this._buckets[bucketIndex]`).
+                // However, tests show that whether delete it or not (`splice()` only), the performances
+                // are close.
+            }
+            if (b) {
+                this._modCount++;
             }
             return b;
         }
 
         public forEach(callbackfn: (value: V, index?: K, map?: IMap<K, V>) => void): void {
-            for (var key in this._o) {
-                callbackfn(this._o[key].value, this._o[key].key, this);
+            var modCount: number = this._modCount;
+            for (var i: number = 0; i < this._buckets.length; i++) {
+                var bucket: Array<KVPair<K, V>> = this._buckets[i];
+                if (bucket !== undefined && bucket.length > 0) {
+                    for (var j: number = 0; j < bucket.length; j++) {
+                        callbackfn(bucket[j].value, bucket[j].key, this);
+                    }
+                }
+                if (this._modCount !== modCount) {
+                    throw new CollectionChangedError();
+                }
             }
         }
 
         public get(key: K): V {
-            var obj = this._o[this._p.getHashCode(key)];
-            if (obj != null) {
-                return obj.value;
+            var hashCode: number = this._p.getHashCode(key);
+            var bucketIndex: number = this.getBucketIndexByHashCode(hashCode);
+            var bucket: Array<KVPair<K, V>> = this._buckets[bucketIndex];
+            if (bucket !== undefined) {
+                for (var i: number = 0; i < bucket.length; i++) {
+                    if (this._c.equals(key, bucket[i].key)) {
+                        return bucket[i].value;
+                    }
+                }
+                // WARN: sometimes you will get NULL...
+                return null;
             } else {
                 // HACK: should return undefined
                 return null;
@@ -191,20 +191,40 @@ export module xross {
         }
 
         public has(key: K): boolean {
-            return this._o[this._p.getHashCode(key)] !== undefined;
-        }
-
-        protected hasHashCode(hashCode: number): boolean {
-            return this._o[hashCode] !== undefined;
+            var hashCode: number = this._p.getHashCode(key);
+            var bucketIndex: number = this.getBucketIndexByHashCode(hashCode);
+            var bucket: Array<KVPair<K, V>> = this._buckets[bucketIndex];
+            if (bucket !== undefined) {
+                for (var i: number = 0; i < bucket.length; i++) {
+                    if (this._c.equals(key, bucket[i].key)) {
+                        return true;
+                    }
+                }
+                return false;
+            } else {
+                return false;
+            }
         }
 
         public set(key: K, value: V): void {
             var hashCode: number = this._p.getHashCode(key);
-            var b = this.hasHashCode(hashCode);
-            if (!b) {
-                this._o[hashCode] = { key: key, value: value };
-                this._count++;
+            var bucketIndex = this.getBucketIndexByHashCode(hashCode);
+            var bucket: Array<KVPair<K, V>> = this._buckets[bucketIndex];
+            if (bucket !== undefined) {
+                for (var i: number = 0; i < bucket.length; i++) {
+                    if (this._c.equals(key, bucket[i].key)) {
+                        return;
+                    }
+                }
+                bucket.push({ key: key, value: value });
+            } else {
+                // Only created the array when needed.
+                // Replacing it with a full array creation when class instantiated shows great efficiency loss.
+                bucket = [{ key: key, value: value }];
+                this._buckets[bucketIndex] = bucket;
             }
+            this._count++;
+            this._modCount++;
         }
 
         public size(): number {
@@ -215,9 +235,15 @@ export module xross {
             return this._count <= 0;
         }
 
+        protected getBucketIndexByHashCode(hashCode: number): number {
+            return (hashCode >>> 0) % BUCKET_SIZE;
+        }
+
         protected _p: INaiveHashCodeProvider<K>;
-        protected _o: any;
+        protected _c: INaiveEqualityComparer<K>;
+        protected _buckets: Array<Array<KVPair<K, V>>>;
         protected _count: number;
+        private _modCount: number;
 
         public toString(): string {
             var s: string = "";
@@ -229,81 +255,182 @@ export module xross {
 
     }
 
-    class LinkedSetBase<T> implements ISet<T> {
+    class SetBase<T> extends MapBase<T, T> implements ISet<T> {
 
-        public constructor(provider: INaiveHashCodeProvider<T>) {
-            this._hashCodeProvider = provider;
-            this._o = [];
-            this._h = [];
+        public constructor(provider: INaiveHashCodeProvider<T>, eq: INaiveEqualityComparer<T>) {
+            super(provider, eq);
+        }
+
+        public forEach(callbackfn: (item: T, index?: T, set?: ISet<T>) => void): void {
+            super.forEach(callbackfn);
+        }
+
+        public set(item: T): void {
+            return super.set(item, item);
+        }
+
+    }
+
+    interface LinkedKVPair<K, V> extends KVPair<K, V> {
+
+        order: number;
+
+    }
+
+    class LinkedMapBase<K, V> implements IMap<K, V> {
+
+        public constructor(provider: INaiveHashCodeProvider<K>, eq: INaiveEqualityComparer<K>) {
+            this._p = provider;
+            this._c = eq;
+            this._modCount = -1;
+            this.clear();
         }
 
         public clear(): void {
-            var len: number = this._o.length;
-            for (var i: number = 0; i < len; i++) {
-                this._o.pop();
-                this._h.pop();
+            this._buckets = new Array<Array<LinkedKVPair<K, V>>>(BUCKET_SIZE);
+            // Initialize with a buffer
+            this._insertedItemsWithOrder = new Array<LinkedKVPair<K, V>>(this._insertBufferInitSize);
+            this._insertOperationCount = 0;
+            this._count = 0;
+            this._modCount++;
+        }
+
+        public delete(key: K): boolean {
+            var hashCode: number = this._p.getHashCode(key);
+            var bucketIndex: number = this.getBucketIndexByHashCode(hashCode);
+            var bucket: Array<LinkedKVPair<K, V>> = this._buckets[bucketIndex];
+            var b: boolean = false;
+            if (bucket !== undefined) {
+                for (var i: number = 0; i < bucket.length; i++) {
+                    if (this._c.equals(key, bucket[i].key)) {
+                        b = true;
+                        delete this._insertedItemsWithOrder[bucket[i].order];
+                        bucket.splice(i, 1);
+                        break;
+                    }
+                }
+                this._count--;
+            }
+            if (b) {
+                this._modCount++;
+            }
+            return b;
+        }
+
+        public forEach(fn: (value: V, key?: K, set?: IMap<K, V>) => void): void {
+            var arr: Array<LinkedKVPair<K, V>> = this._insertedItemsWithOrder;
+            // TODO: More deletions, more time for traversal.
+            // Design a compact method to minimize the needed traversal array
+            for (var i = 0; i < arr.length; i++) {
+                if (arr[i] !== undefined) {
+                    fn(arr[i].value, arr[i].key, this);
+                }
             }
         }
 
-        public delete(key: T): boolean {
-            var index: number = this._h.indexOf(this._hashCodeProvider.getHashCode(key));
-            if (index >= 0) {
-                this._o.splice(index, 1);
-                this._h.splice(index, 1);
+        public get(key: K): V {
+            var hashCode: number = this._p.getHashCode(key);
+            var bucketIndex: number = this.getBucketIndexByHashCode(hashCode);
+            var bucket: Array<LinkedKVPair<K, V>> = this._buckets[bucketIndex];
+            if (bucket !== undefined) {
+                for (var i: number = 0; i < bucket.length; i++) {
+                    if (this._c.equals(key, bucket[i].key)) {
+                        return bucket[i].value;
+                    }
+                }
+                // WARN: sometimes you will get NULL...
+                return null;
+            } else {
+                // HACK: should return undefined
+                return null;
+            }
+        }
+
+        public has(key: K): boolean {
+            var hashCode: number = this._p.getHashCode(key);
+            var bucketIndex: number = this.getBucketIndexByHashCode(hashCode);
+            var bucket: Array<LinkedKVPair<K, V>> = this._buckets[bucketIndex];
+            if (bucket !== undefined) {
+                for (var i: number = 0; i < bucket.length; i++) {
+                    if (this._c.equals(key, bucket[i].key)) {
+                        return true;
+                    }
+                }
+                return false;
             } else {
                 return false;
             }
         }
 
-        public forEach(fn: (value: T, key?: T, set?: ISet<T>) => void): void {
-            var i: number = 0;
-            for (var i = 0; i < this._o.length; i++) {
-                fn(this._o[i], this._o[i], this);
-            }
-        }
-
-        public get(key: T): T {
-            var index: number = this._h.indexOf(this._hashCodeProvider.getHashCode(key));
-            if (index >= 0) {
-                return this._o[index];
+        public set(key: K, value: V): void {
+            var hashCode: number = this._p.getHashCode(key);
+            var bucketIndex = this.getBucketIndexByHashCode(hashCode);
+            var bucket: Array<LinkedKVPair<K, V>> = this._buckets[bucketIndex];
+            var kv: LinkedKVPair<K, V>;
+            if (bucket !== undefined) {
+                for (var i: number = 0; i < bucket.length; i++) {
+                    if (this._c.equals(key, bucket[i].key)) {
+                        return;
+                    }
+                }
+                kv = { key: key, value: value, order: this._insertOperationCount };
+                this._insertedItemsWithOrder[kv.order] = kv;
+                bucket.push(kv);
             } else {
-                return null;
+                kv = { key: key, value: value, order: this._insertOperationCount };
+                this._insertedItemsWithOrder[kv.order] = kv;
+                bucket = [kv];
+                this._buckets[bucketIndex] = bucket;
             }
-        }
-
-        public has(key: T): boolean {
-            return this._h.indexOf(this._hashCodeProvider.getHashCode(key)) >= 0;
-        }
-
-        public set(key: T): void {
-            var hashCode = this._hashCodeProvider.getHashCode(key);
-            var index: number = this._h.indexOf(hashCode);
-            if (index >= 0) {
-                this._o[index] = key;
-            } else {
-                this._o.push(key);
-                this._h.push(hashCode);
+            this._insertOperationCount++;
+            if (this._insertOperationCount >= this._insertedItemsWithOrder.length) {
+                this._insertedItemsWithOrder = this._insertedItemsWithOrder.concat(new Array<LinkedKVPair<K, V>>(this._insertBufferInitSize));
             }
+            this._count++;
+            this._modCount++;
         }
 
         public size(): number {
-            return this._o.length;
+            return this._count;
         }
 
         public isEmpty(): boolean {
-            return this._o.length <= 0;
+            return this._count <= 0;
         }
 
-        private _hashCodeProvider: INaiveHashCodeProvider<T>;
-        private _o: Array<T>;
-        private _h: Array<number>;
+        protected getBucketIndexByHashCode(hashCode: number): number {
+            return (hashCode >>> 0) % BUCKET_SIZE;
+        }
+
+        protected _p: INaiveHashCodeProvider<K>;
+        protected _c: INaiveEqualityComparer<K>;
+        protected _buckets: Array<Array<LinkedKVPair<K, V>>>;
+        protected _insertedItemsWithOrder: Array<LinkedKVPair<K, V>>;
+        protected _insertOperationCount: number;
+        protected _count: number;
+        private _modCount: number;
+        private _insertBufferInitSize = 100;
 
     }
 
-    interface RBNode<K, V> {
+    class LinkedSetBase<T> extends LinkedMapBase<T, T> implements ISet<T> {
 
-        key: K;
-        value: V;
+        public constructor(provider: INaiveHashCodeProvider<T>, eq: INaiveEqualityComparer<T>) {
+            super(provider, eq);
+        }
+
+        public forEach(fn: (value: T, key?: T, set?: ISet<T>) => void): void {
+            super.forEach(fn);
+        }
+
+        public set(item: T): void {
+            return super.set(item, item);
+        }
+
+    }
+
+    interface RBNode<K, V> extends KVPair<K, V> {
+
         left: RBNode<K, V>;
         right: RBNode<K, V>;
         parent: RBNode<K, V>;
@@ -312,7 +439,7 @@ export module xross {
     }
 
     const RED: boolean = false, BLACK: boolean = true;
-    var RB = {
+    const RB = {
         create: function <K, V>(key: K, value: V, parent: RBNode<K, V>, color: boolean = BLACK,
             left: RBNode<K, V> = null, right: RBNode<K, V> = null): RBNode<K, V> {
             return { key: key, value: value, parent: parent, color: color, left: left, right: right };
@@ -329,19 +456,20 @@ export module xross {
         return n === null ? BLACK : n.color;
     }
 
-    class TreeCollectionBase<K, V>{
+    // TreeSet and TreeMap does not allow item collision. Replacing is the only operation when
+    // a collision appears.
+    class TreeCollectionBase<K, V> {
 
         public constructor(comparer: IComparer<K>) {
             this._comparer = comparer;
-            this._root = null;
-            this._size = 0;
-            this._modCount = 0;
+            this._modCount = -1;
+            this.clear();
         }
 
         public clear(): void {
             this._root = null;
-            this._modCount = 0;
             this._size = 0;
+            this._modCount++;
         }
 
         public delete(key: K): boolean {
@@ -350,9 +478,19 @@ export module xross {
                 return false;
             } else {
                 this.deleteNode(node);
-                this._size--;
-                this._modCount++;
                 return true;
+            }
+        }
+
+        public forEach(callbackfn: (value: V, index?: K, map?: IMap<K, V>) => void): void {
+            var queue: Array<RBNode<K, V>> = TreeCollectionBase.buildQueryQueue(this._root);
+            var len: number = queue.length;
+            var modCount: number = this._modCount;
+            for (var i: number = 0; i < len; i++) {
+                callbackfn(queue[i].value, queue[i].key, this);
+                if (this._modCount !== modCount) {
+                    throw new CollectionChangedError();
+                }
             }
         }
 
@@ -386,8 +524,6 @@ export module xross {
                 }
                 var v: V = n.value;
                 this.deleteNode(n);
-                this._size--;
-                this._modCount++;
                 return v;
             } else {
                 return null;
@@ -403,8 +539,6 @@ export module xross {
                 }
                 var v: V = n.value;
                 this.deleteNode(n);
-                this._size--;
-                this._modCount++;
                 return v;
             } else {
                 return null;
@@ -476,6 +610,8 @@ export module xross {
             if (p === null) {
                 return;
             }
+            this._size--;
+            this._modCount++;
             if (p.left !== null && p.right !== null) {
                 var s: RBNode<K, V> = TreeCollectionBase.successor(p);
                 p.key = s.key;
@@ -836,20 +972,32 @@ export module xross {
         protected _size: number;
         protected _modCount: number;
 
+        public toString(): string {
+            var s: string = "";
+            this.forEach((v) => {
+                s += v.toString() + " ";
+            });
+            return s;
+        }
+
     }
 
-    class TreeSetBase<T> extends TreeCollectionBase<T, T> implements ISet<T>{
+    class TreeMapBase<K, V> extends TreeCollectionBase<K, V> implements IMap<K, V> {
+
+        public constructor(comparer: IComparer<K>) {
+            super(comparer);
+        }
+
+    }
+
+    class TreeSetBase<T> extends TreeCollectionBase<T, T> implements ISet<T> {
 
         public constructor(comparer: IComparer<T>) {
             super(comparer);
         }
 
         public forEach(callbackfn: (item: T, index?: T, set?: ISet<T>) => void): void {
-            var queue: Array<RBNode<T, T>> = TreeCollectionBase.buildQueryQueue(this._root);
-            var len: number = queue.length;
-            for (var i: number = 0; i < len; i++) {
-                callbackfn(queue[i].value, queue[i].key, this);
-            }
+            super.forEach(callbackfn);
         }
 
         public set(item: T): void {
@@ -874,46 +1022,12 @@ export module xross {
             }
         }
 
-        protected _comparer: IComparer<T>;
-
-        public toString(): string {
-            var s: string = "";
-            this.forEach((v) => {
-                s += v.toString() + " ";
-            });
-            return s;
-        }
-
-    }
-
-    class TreeMapBase<K, V> extends TreeCollectionBase<K, V> implements IMap<K, V>{
-
-        public constructor(comparer: IComparer<K>) {
-            super(comparer);
-        }
-
-        public forEach(callbackfn: (value: V, index?: K, map?: IMap<K, V>) => void): void {
-            var queue: Array<RBNode<K, V>> = TreeCollectionBase.buildQueryQueue(this._root);
-            var len: number = queue.length;
-            for (var i: number = 0; i < len; i++) {
-                callbackfn(queue[i].value, queue[i].key, this);
-            }
-        }
-
-        public toString(): string {
-            var s: string = "";
-            this.forEach((v) => {
-                s += v.toString() + " ";
-            });
-            return s;
-        }
-
     }
 
     export class ObjectSet<T> extends SetBase<T> {
 
         public constructor() {
-            super(new ObjectHashCodeProvider<T>());
+            super(new ObjectHashCodeProvider<T>(), new ObjectEqualityComparer<T>());
         }
 
     }
@@ -921,7 +1035,7 @@ export module xross {
     export class ObjectMap<K, V> extends MapBase<K, V> {
 
         public constructor() {
-            super(new ObjectHashCodeProvider<K>());
+            super(new ObjectHashCodeProvider<K>(), new ObjectEqualityComparer<K>());
         }
 
     }
@@ -929,7 +1043,7 @@ export module xross {
     export class PrimitiveSet<T> extends SetBase<T> {
 
         public constructor() {
-            super(new PrimitiveHashCodeProvider<T>());
+            super(new PrimitiveHashCodeProvider<T>(), new PrimitiveEqualityComparer<T>());
         }
 
     }
@@ -937,7 +1051,7 @@ export module xross {
     export class PrimitiveMap<K, V> extends MapBase<K, V> {
 
         public constructor() {
-            super(new PrimitiveHashCodeProvider<K>());
+            super(new PrimitiveHashCodeProvider<K>(), new PrimitiveEqualityComparer<K>());
         }
 
     }
@@ -945,7 +1059,7 @@ export module xross {
     export class LinkedObjectSet<T> extends LinkedSetBase<T> {
 
         public constructor() {
-            super(new ObjectHashCodeProvider());
+            super(new ObjectHashCodeProvider(), new ObjectEqualityComparer<T>());
         }
 
     }
@@ -953,7 +1067,7 @@ export module xross {
     export class LinkedPrimitiveSet<T> extends LinkedSetBase<T> {
 
         public constructor() {
-            super(new PrimitiveHashCodeProvider());
+            super(new PrimitiveHashCodeProvider(), new PrimitiveEqualityComparer<T>());
         }
 
     }
@@ -1007,9 +1121,9 @@ export module xross {
     }
 
     export function arrayToSet<T>(array: Array<T>, set: ISet<T>): void {
-        array.forEach((v) => {
-            set.set(v);
-        });
+        for (var i: number = 0; i < array.length; i++) {
+            set.set(array[i]);
+        }
     }
 
 }

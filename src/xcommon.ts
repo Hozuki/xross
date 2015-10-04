@@ -21,6 +21,12 @@ export module xross {
 
     }
 
+    export interface IHashCodeProvider {
+
+        getHashCode(): number;
+
+    }
+
     export class NotImplementedError implements Error {
 
         public constructor(message: string = "Not implemented") {
@@ -56,7 +62,7 @@ export module xross {
         private _message: string;
 
     }
-    
+
     export class InvalidOperationError implements Error {
 
         public constructor(message: string = "Invalid operation") {
@@ -65,6 +71,42 @@ export module xross {
 
         public get name(): string {
             return "InvalidOperationError";
+        }
+
+        public get message(): string {
+            return this._message;
+        }
+
+        private _message: string;
+
+    }
+
+    export class ArithmeticError implements Error {
+
+        public constructor(message: string = "Arithmetic error") {
+            this._message = message;
+        }
+
+        public get name(): string {
+            return "ArithmeticError";
+        }
+
+        public get message(): string {
+            return this._message;
+        }
+
+        private _message: string;
+
+    }
+    
+    export class CollectionChangedError implements Error {
+
+        public constructor(message: string = "Collection Changed") {
+            this._message = message;
+        }
+
+        public get name(): string {
+            return "CollectionChangedError";
         }
 
         public get message(): string {
