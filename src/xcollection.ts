@@ -274,6 +274,8 @@ export module xross {
     interface LinkedKVPair<K, V> extends KVPair<K, V> {
 
         order: number;
+        prev: number;
+        next: number;
 
     }
 
@@ -293,6 +295,8 @@ export module xross {
             this._insertOperationCount = 0;
             this._count = 0;
             this._modCount++;
+            this._headOrder = -1;
+            this._tailOrder = -1;
         }
 
         public delete(key: K): boolean {
@@ -304,6 +308,19 @@ export module xross {
                 for (var i: number = 0; i < bucket.length; i++) {
                     if (this._c.equals(key, bucket[i].key)) {
                         b = true;
+                        var cur: LinkedKVPair<K, V> = this._insertedItemsWithOrder[bucket[i].order];
+                        if (cur.prev >= 0) {
+                            this._insertedItemsWithOrder[cur.prev].next = cur.next;
+                        }
+                        else {
+                            this._headOrder = cur.next;
+                        }
+                        if (cur.next >= 0) {
+                            this._insertedItemsWithOrder[cur.next].prev = cur.prev;
+                        }
+                        else {
+                            this._tailOrder = cur.prev;
+                        }
                         delete this._insertedItemsWithOrder[bucket[i].order];
                         bucket.splice(i, 1);
                         break;
@@ -319,12 +336,11 @@ export module xross {
 
         public forEach(fn: (value: V, key?: K, set?: IMap<K, V>) => void): void {
             var arr: Array<LinkedKVPair<K, V>> = this._insertedItemsWithOrder;
-            // TODO: More deletions, more time for traversal.
-            // Design a compact method to minimize the needed traversal array
-            for (var i = 0; i < arr.length; i++) {
-                if (arr[i] !== undefined) {
-                    fn(arr[i].value, arr[i].key, this);
-                }
+            if (this._headOrder < 0) return;
+            var i: number = this._headOrder;
+            while (i >= 0) {
+                fn(arr[i].value, arr[i].key, this);
+                i = arr[i].next;
             }
         }
 
@@ -373,15 +389,20 @@ export module xross {
                         return;
                     }
                 }
-                kv = { key: key, value: value, order: this._insertOperationCount };
-                this._insertedItemsWithOrder[kv.order] = kv;
-                bucket.push(kv);
             } else {
-                kv = { key: key, value: value, order: this._insertOperationCount };
-                this._insertedItemsWithOrder[kv.order] = kv;
-                bucket = [kv];
-                this._buckets[bucketIndex] = bucket;
+                this._buckets[bucketIndex] = bucket = [];
             }
+
+            kv = { key: key, value: value, order: this._insertOperationCount, prev: this._tailOrder, next: -1 };
+            bucket.push(kv);
+            this._insertedItemsWithOrder[kv.order] = kv;
+
+            if (this._tailOrder >= 0)
+                this._insertedItemsWithOrder[this._tailOrder].next = kv.order;
+            if (this._headOrder < 0)
+                this._headOrder = kv.order;
+            this._tailOrder = kv.order;
+
             this._insertOperationCount++;
             if (this._insertOperationCount >= this._insertedItemsWithOrder.length) {
                 this._insertedItemsWithOrder = this._insertedItemsWithOrder.concat(new Array<LinkedKVPair<K, V>>(this._insertBufferInitSize));
@@ -408,6 +429,8 @@ export module xross {
         protected _insertedItemsWithOrder: Array<LinkedKVPair<K, V>>;
         protected _insertOperationCount: number;
         protected _count: number;
+        protected _headOrder: number;
+        protected _tailOrder: number;
         private _modCount: number;
         private _insertBufferInitSize = 100;
 

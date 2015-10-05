@@ -32,6 +32,35 @@ export module xross {
         return r;
     }
 
+    class Coerce {
+        constructor() {
+            throw new Error("Cannot instantiate");
+        }
+
+        static _arrayBuffer: ArrayBuffer = null;
+        static _i32Array: Int32Array = null;
+        static _f64Array: Float64Array = null;
+
+        static init(): void {
+            Coerce._arrayBuffer = new ArrayBuffer(8);
+            Coerce._i32Array = new Int32Array(Coerce._arrayBuffer);
+            Coerce._f64Array = new Float64Array(Coerce._arrayBuffer);
+        }
+
+        static f64i64(f64: number): Array<number> {
+            if (!Coerce._arrayBuffer) Coerce.init();
+            Coerce._f64Array[0] = f64;
+            return [Coerce._i32Array[0], Coerce._i32Array[1]];
+        }
+
+        static i64f64(i32a: number, i32b: number): number {
+            if (!Coerce._arrayBuffer) Coerce.init();
+            Coerce._i32Array[0] = i32a;
+            Coerce._i32Array[1] = i32b;
+            return Coerce._f64Array[0];
+        }
+    }
+
     export class Point2D implements IEquatable<Point2D>, IHashCodeProvider {
 
         public static ORIGIN: Point2D = new Point2D(0, 0);
@@ -39,7 +68,10 @@ export module xross {
         public constructor(x: number = 0, y: number = 0) {
             this.x = x;
             this.y = y;
-            this._hashCode = bkdrHash(this.x.toString() + " " + this.y.toString());
+
+            var xi64: Array<number> = Coerce.f64i64(this.x);
+            var yi64: Array<number> = Coerce.f64i64(this.y);
+            this._hashCode = xi64[0] ^ xi64[1] ^ yi64[0] ^ yi64[1];
         }
 
         public x: number;
@@ -134,7 +166,10 @@ export module xross {
                 this.slope = !isFinite(<number>p1OrSlope) ? +Infinity : <number>p1OrSlope;
                 this.constant = this.calculateConstant(p2);
             }
-            this._hashCode = bkdrHash(this.slope.toString() + " " + this.constant.toString());
+
+            var si64: Array<number> = Coerce.f64i64(this.slope);
+            var ci64: Array<number> = Coerce.f64i64(this.constant);
+            this._hashCode = si64[0] ^ si64[1] ^ ci64[0] ^ ci64[1];
         }
 
         public slope: number;
@@ -161,7 +196,9 @@ export module xross {
         }
 
         public isVertical(): boolean {
-            return !isFinite(this.slope);
+            // return !isFinite(this.slope);
+            // This proves to be more performant while semantics remain the same
+            return this.slope === Infinity || this.slope === -Infinity || this.slope === NaN;
         }
 
         public isHorizontal(): boolean {
